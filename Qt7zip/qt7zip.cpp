@@ -25,12 +25,421 @@
 
 #include "qt7zip.h"
 
-Qt7zip::Qt7zip(QObject *parent) : QObject(parent)
-{
+#include <QFile>
+#include <QFileInfo>
+#include <QInputDialog>
+#include <QCoreApplication>
 
+#include "open_callback.h"
+
+// Define GUID
+// Tou can find the list of all GUIDs in Guid.txt file.
+// use another CLSIDs, if you want to support other formats (zip, rar, ...).
+// {23170F69-40C1-278A-1000-000110070000}
+
+DEFINE_GUID(CLSID_CFormat7z  , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x07, 0x00, 0x00);
+DEFINE_GUID(CLSID_CFormatZip , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x01, 0x00, 0x00);
+DEFINE_GUID(CLSID_CFormatRar , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x03, 0x00, 0x00);
+DEFINE_GUID(CLSID_CFormatRar5, 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xcc, 0x00, 0x00);
+DEFINE_GUID(CLSID_CFormatTar , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xee, 0x00, 0x00);
+DEFINE_GUID(CLSID_CFormatArj , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x04, 0x00, 0x00);
+
+// Unused Formats --
+//DEFINE_GUID(CLSID_CFormatBZip2   , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x02, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatCab     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x08, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatChm     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xe9, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatCompound, 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xe5, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatCpio    , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xed, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatDeb     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xec, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatGZip    , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xef, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatIso     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xe7, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatLzh     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x06, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatLzma    , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x0a, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatNsis    , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x09, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatRpm     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xeb, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatSplit   , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xea, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatWim     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xe6, 0x00, 0x00);
+//DEFINE_GUID(CLSID_CFormatZ       , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x05, 0x00, 0x00);
+
+DEFINE_GUID(IID_InArchive          , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x06, 0x00, 0x60, 0x00, 0x00);
+//DEFINE_GUID(IID_IOutStream         , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x04, 0x00, 0x00);
+//DEFINE_GUID(IID_IInStream          , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00);
+//DEFINE_GUID(IID_IStreamGetSize     , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x06, 0x00, 0x00);
+//DEFINE_GUID(IID_ISequentialInStream, 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x00);
+//DEFINE_GUID(IID_ISetCompressCodecsInfo, 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x04, 0x00, 0x61, 0x00, 0x00);
+//DEFINE_GUID(IID_IOutArchive        , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x06, 0x00, 0xA0, 0x00, 0x00);
+
+enum CLSID_Format {
+	CLSID_Format7z   = 0,
+	CLSID_FormatZip  = 1,
+	CLSID_FormatRar  = 2,
+	CLSID_FormatRar5 = 3,
+	CLSID_FormatTar  = 4,
+	CLSID_FormatArj  = 5
+};
+
+GUID _supportedFileFormats[] = {CLSID_CFormat7z, CLSID_CFormatZip, CLSID_CFormatRar, CLSID_CFormatRar5, CLSID_CFormatTar,  CLSID_CFormatArj};
+std::vector<GUID> supportedFileFormats(_supportedFileFormats, _supportedFileFormats + sizeof(_supportedFileFormats) / sizeof(_supportedFileFormats[0]));
+
+const unsigned char sevenz[6] = {static_cast<unsigned char>(0x37), static_cast<unsigned char>(0x7A), static_cast<unsigned char>(0xBC), static_cast<unsigned char>(0xAF), static_cast<unsigned char>(0x27), static_cast<unsigned char>(0x1C)};
+const unsigned char zip[2]    = {static_cast<unsigned char>(0x50), static_cast<unsigned char>(0x4B)};
+const unsigned char rar[7]    = {static_cast<unsigned char>(0x52), static_cast<unsigned char>(0x61), static_cast<unsigned char>(0x72), static_cast<unsigned char>(0x21), static_cast<unsigned char>(0x1A), static_cast<unsigned char>(0x07), static_cast<unsigned char>(0x00)};
+const unsigned char rar5[8]   = {static_cast<unsigned char>(0x52), static_cast<unsigned char>(0x61), static_cast<unsigned char>(0x72), static_cast<unsigned char>(0x21), static_cast<unsigned char>(0x1A), static_cast<unsigned char>(0x07), static_cast<unsigned char>(0x01), static_cast<unsigned char>(0x00)};
+const unsigned char tar[6]    = "ustar";
+const unsigned char arj[2]    = {static_cast<unsigned char>(0x60), static_cast<unsigned char>(0xEA)};
+
+struct SevenZipInterface {
+	Func_CreateObject createObjectFunc;
+
+	CMyComPtr<IInArchive> archive;
+	CMyComPtr<IOutArchive> outArchive;
+};
+
+static UString toUString(QString str)
+{
+	return str.toStdWString().c_str();
+}
+
+static QString toQString(UString str)
+{
+	return QString::fromWCharArray(str);
+}
+
+static GUID getFileType(const QString &fileName)
+{
+	QFile filex(fileName);
+	if (filex.open(QIODevice::ReadOnly))
+	{
+		QByteArray magicNumber = filex.read(8); // read first 8 bytes
+	//	0 = CLSID_CFormat7z
+	//	1 = CLSID_CFormatZip
+	//	2 = CLSID_CFormatRar
+	//	3 = CLSID_CFormatRar5
+	//	4 = CLSID_CFormatTar
+	//	5 = CLSID_CFormatArj
+	// TODO: this suffix matching is rather primitive - better approach?
+		if (memcmp(magicNumber, rar, 6) == 0)
+		{
+			if (memcmp(magicNumber, rar5, 7) == 0)
+				return CLSID_CFormatRar5;
+			else
+				return CLSID_CFormatRar;
+		} else if (memcmp(magicNumber, zip, 2) == 0)
+			return CLSID_CFormatZip;
+		else if (memcmp(magicNumber, sevenz, 6) == 0)
+			return CLSID_CFormat7z;
+		else if (memcmp(magicNumber, arj, 2) == 0)
+			return CLSID_CFormatArj;
+		else {
+			filex.seek(257);
+			magicNumber = filex.read(8);
+			if (memcmp(magicNumber, tar, 5) == 0)
+				return CLSID_CFormatTar;
+		}
+	}
+
+	return CLSID_CFormat7z;
+}
+
+static QVariant getArchiveProperty(CMyComPtr<IInArchive> archive, PROPID propID)
+{
+	QVariant value_out;
+	NCOM::CPropVariant value;
+	HRESULT res = archive->GetArchiveProperty(propID, &value);
+
+	if (res == 0)
+	{
+		switch (propID)
+		{
+			case kpidComment:
+			{
+				UString comment;
+				if (value.vt == VT_EMPTY)
+					comment = kEmptyFileAlias;
+				else {
+					if (value.vt != VT_BSTR)
+						comment = kEmptyFileAlias;
+					comment = value.bstrVal;
+				}
+
+				value_out = QString::fromWCharArray(comment);
+			}
+			break;
+		}
+	}
+
+	return value_out;
+}
+
+static QVariant getProperty(CMyComPtr<IInArchive> archive, quint32 index, PROPID propID)
+{
+	QVariant value_out;
+	NCOM::CPropVariant value;
+	HRESULT res = archive->GetProperty(index, propID, &value);
+
+	switch (propID)
+	{
+		case kpidPath:
+		{
+			UString fullPath;
+			if (value.vt == VT_EMPTY)
+				fullPath = kEmptyFileAlias;
+			else {
+				if (value.vt == VT_BSTR)
+					fullPath = value.bstrVal;
+				else
+					fullPath = kEmptyFileAlias;
+			}
+
+			value_out = QString::fromWCharArray(fullPath);
+		}
+		break;
+		case kpidCRC:
+		{
+			char crc[8];
+			ConvertPropVariantToShortString(value, crc);
+			QString crc32 = "0";
+			crc32.sprintf("%X", QString(crc).toUInt());
+
+			value_out = crc32.rightJustified(8, '0');
+		}
+		break;
+		case kpidSize:
+		case kpidPackSize:
+		{
+			quint64 size = 0;
+			if (value.vt != VT_EMPTY)
+				ConvertPropVariantToUInt64(value, size);
+
+			value_out = size;
+		}
+		break;
+		case kpidIsDir:
+		{
+			bool isDir = false;
+			if (value.vt == VT_BOOL)
+				isDir = VARIANT_BOOLToBool(value.boolVal);
+			else if (value.vt == VT_EMPTY)
+				isDir = false;
+
+			value_out = isDir;
+		}
+		break;
+		case kpidEncrypted:
+		{
+			bool isEncrypted = false;
+			if (res == 0 && value.vt == VT_BOOL)
+				isEncrypted = value.bVal;
+
+			value_out = isEncrypted;
+		}
+		break;
+	}
+
+	return value_out;
+}
+
+
+Qt7zip::Qt7zip(QObject *parent) : QObject(parent),
+	sevenzLib(0), is_load_7zlib(false), is_open(false)
+{
+	szInterface = new SevenZipInterface;
+	is_load_7zlib = loadLib();
 }
 
 Qt7zip::~Qt7zip()
 {
+	closeArchive();
 
+	delete szInterface;
+	delete sevenzLib;
+}
+
+void Qt7zip::closeArchive()
+{
+// always close the archive!
+	if (szInterface->archive)
+		szInterface->archive->Close();
+}
+
+
+bool Qt7zip::loadLib(const QString &fileName)
+{
+// LOAD library
+// TODO check if this works in OSX (7z.so instead of 7z.dylib)
+// fix1: try to load "7z.so"
+// fix2: rename 7z.so to 7z.dylib
+
+	is_load_7zlib = true;
+	QString path_lib_7z = "";
+
+#if defined Q_OS_UNIX
+	#if defined Q_OS_MAC
+		path_lib_7z = QCoreApplication::applicationDirPath() +"/p7zip/7z"; // .so, .dylib
+	#else
+		path_lib_7z = QString(LIBDIR) +"/p7zip/7z.so";
+	#endif
+#else
+		path_lib_7z = QCoreApplication::applicationDirPath() +"/7z"; // .dll
+#endif
+
+	if (!fileName.isEmpty())
+		path_lib_7z = fileName;
+
+	if (sevenzLib == 0)
+		sevenzLib = new QLibrary(path_lib_7z);
+	else {
+		if (sevenzLib->isLoaded())
+			sevenzLib->unload();
+		sevenzLib->setFileName(path_lib_7z);
+	}
+
+	if (!sevenzLib->load())
+	{
+		PrintError("Can not load 7-zip library", sevenzLib->errorString());
+		is_load_7zlib = false;
+	} else {
+		szInterface->createObjectFunc = (Func_CreateObject)sevenzLib->resolve("CreateObject");
+		if (!szInterface->createObjectFunc)
+		{
+			PrintError("Can not get CreateObject");
+			is_load_7zlib = false;
+		}
+	}
+
+	return is_load_7zlib;
+}
+
+
+bool Qt7zip::open(const QString &fileName, const QString &password)
+{
+	if (is_open)
+		closeArchive();
+
+	if (!is_load_7zlib)
+	{
+		is_open = false;
+		return false;
+	}
+
+	UString u_fileName = toUString(fileName);
+	UString u_password = toUString(password);
+	m_password = password;
+
+// Comprobamos la extension....
+	GUID guid_format = getFileType(fileName);
+
+	if (szInterface->createObjectFunc(&guid_format, &IID_IInArchive, (void **)&szInterface->archive) != S_OK)
+	{
+		PrintError("Can not get class object");
+		is_open = false;
+		return false;
+	}
+
+	CInFileStream *fileSpec = new CInFileStream;
+	CMyComPtr<IInStream> file = fileSpec;
+
+	if (!fileSpec->Open(u_fileName))
+	{
+		PrintError("Can not open archive file", fileName);
+		is_open = false;
+		return false;
+	}
+
+	{
+		CArchiveOpenCallback *openCallbackSpec = new CArchiveOpenCallback;
+		CMyComPtr<IArchiveOpenCallback> openCallback(openCallbackSpec);
+		openCallbackSpec->PasswordIsDefined = false;
+
+		if (!password.isEmpty())
+		{
+			openCallbackSpec->PasswordIsDefined = true;
+			openCallbackSpec->Password = u_password;
+		}
+
+		const UInt64 scanSize = 1 << 23;
+		if (szInterface->archive->Open(file, &scanSize, openCallback) != S_OK)
+		{
+			PrintError("Can not open file as archive", fileName);
+			is_open = false;
+			return false;
+		}
+	}
+
+	szEntryInfo entryInfo;
+
+	is_open      = true;
+	is_encrypted = false;
+	m_comment    = getArchiveProperty(szInterface->archive, kpidComment).toString();
+
+	m_ArchiveList.clear();
+
+	quint32 entryTotal = 0;
+	szInterface->archive->GetNumberOfItems(&entryTotal);
+	for (quint32 i = 0; i < entryTotal; i++)
+	{
+	// Get info of file
+		entryInfo.id        = i;
+		entryInfo.path      = getProperty(szInterface->archive, i, kpidPath).toString().replace("\\","/");
+		entryInfo.name      = QFileInfo(entryInfo.path).fileName();
+		entryInfo.crc32     = getProperty(szInterface->archive, i, kpidCRC).toString();
+		entryInfo.size      = getProperty(szInterface->archive, i, kpidSize).toUInt();
+		entryInfo.packsize  = getProperty(szInterface->archive, i, kpidPackSize).toUInt();
+		entryInfo.isDir     = getProperty(szInterface->archive, i, kpidIsDir).toBool();
+		entryInfo.encrypted = getProperty(szInterface->archive, i, kpidEncrypted).toBool();
+
+		if (entryInfo.encrypted && !is_encrypted)
+			is_encrypted = true;
+
+		m_ArchiveList.insert(entryInfo.path, entryInfo);
+	}
+
+	m_entryList.clear();
+	m_entryListInfo.clear();
+	indexToArchive.clear();
+
+	m_entryTotal = 0;
+	foreach (szEntryInfo zinfo, m_ArchiveList)
+	{
+		m_entryList.insert(m_entryTotal, zinfo.path);
+		m_entryListInfo.insert(m_entryTotal, zinfo);
+		indexToArchive.insert(m_entryTotal, zinfo.id);
+
+		m_entryTotal++;
+	}
+
+	if (is_encrypted && m_password.isEmpty())
+	{
+		bool ok = false;
+		QString text_pass = QInputDialog::getText(0, tr("Archivos cifrados encontrados") +"...", tr("Puede que necesite una contraseña") +"\n"+ tr("Contraseña") +":", QLineEdit::Password, "", &ok);
+		if (ok && !text_pass.isEmpty())
+			m_password = text_pass;
+	}
+
+	return true;
+}
+
+int Qt7zip::indexOf(const QRegExp &rx, int from)
+{
+	return m_entryList.indexOf(rx, from);
+}
+
+szEntryInfo Qt7zip::getEntryInfo(const QString &fileName)
+{
+	szEntryInfo entryInfo;
+	entryInfo.id        = 0;
+	entryInfo.path      = "";
+	entryInfo.name      = "";
+	entryInfo.crc32     = "";
+	entryInfo.size      = 0;
+	entryInfo.packsize  = 0;
+	entryInfo.isDir     = false;
+	entryInfo.encrypted = false;
+
+	if (is_open && !m_ArchiveList.isEmpty())
+	{
+		entryInfo = m_ArchiveList.value(fileName, entryInfo);
+	}
+
+	return entryInfo;
 }

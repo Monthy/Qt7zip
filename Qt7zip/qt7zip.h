@@ -27,6 +27,22 @@
 #define QT7ZIP_H
 
 #include <QObject>
+#include <QLibrary>
+#include <QStringList>
+#include <QMap>
+
+struct SevenZipInterface;
+
+typedef struct {
+	quint32 id;
+	QString path;
+	QString name;
+	QString crc32;
+	quint64 size;
+	quint64 packsize;
+	bool    isDir;
+	bool    encrypted;
+} szEntryInfo;
 
 class Qt7zip : public QObject
 {
@@ -34,6 +50,39 @@ class Qt7zip : public QObject
 public:
 	explicit Qt7zip(QObject *parent = 0);
 	~Qt7zip();
+
+	void closeArchive();
+	bool loadLib(const QString &fileName = "");
+	bool isLoad7zLib() { return is_load_7zlib; }
+
+	bool open(const QString &fileName, const QString &password = "");
+	bool isOpen() { return is_open; }
+	bool isEncrypted() { return is_encrypted; }
+
+	int getNumEntries() { return m_entryTotal; }
+	QString getComment() { return m_comment; }
+	szEntryInfo getEntryInfo(const QString &fileName);
+
+	QStringList entryList() { return m_entryList; }
+	QList<szEntryInfo> entryListInfo() { return m_entryListInfo; }
+
+	int indexOf(const QRegExp &rx, int from = 0);
+	int indexOfNoDir(const QRegExp &rx, int from = 0);
+
+private:
+	QLibrary *sevenzLib;
+
+	SevenZipInterface *szInterface;
+
+	bool is_load_7zlib, is_open, is_encrypted;
+	int m_entryTotal;
+	QString m_password, m_comment;
+	QStringList m_entryList;
+	QList<szEntryInfo> m_entryListInfo;
+
+
+	QMap<int, quint32> indexToArchive;
+	QMap<QString, szEntryInfo> m_ArchiveList;
 
 };
 

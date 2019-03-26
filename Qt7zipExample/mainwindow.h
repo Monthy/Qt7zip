@@ -26,9 +26,22 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
+#include <QDebug>
 #include <QMainWindow>
 
 #include "qt7zip.h"
+
+enum ColTwList {
+	col_index = 0,
+	col_name = 1,
+	col_path = 2,
+	col_size = 3,
+	col_packsize = 4,
+	col_crc32 = 5,
+	col_encrypted = 6,
+	col_isdir = 7
+};
+
 
 namespace Ui {
 class MainWindow;
@@ -47,8 +60,12 @@ private:
 
 	Qt7zip *z_file;
 
+	QList<szEntryInfo> z_listInfo;
+	bool is_load_7zlib;
+
 private slots:
 	void on_btn_seleccioar_archivo_clicked();
+	void on_btn_abrir_clicked();
 
 };
 

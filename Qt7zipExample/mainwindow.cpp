@@ -43,7 +43,9 @@ MainWindow::MainWindow(QWidget *parent) :
 #endif
 
 	z_file = new Qt7zip();
+	is_load_7zlib = z_file->isLoad7zLib();
 
+	qDebug() << "is_load_7zlib: " << is_load_7zlib;
 }
 
 MainWindow::~MainWindow()
@@ -66,5 +68,44 @@ void MainWindow::on_btn_seleccioar_archivo_clicked()
 	if (!archivo.isEmpty() && QFile::exists(archivo))
 	{
 		ui->txt_file->setText(archivo);
+	}
+}
+
+void MainWindow::on_btn_abrir_clicked()
+{
+	if (is_load_7zlib)
+	{
+		if (z_file->open(ui->txt_file->text(), ui->txt_pass->text()))
+		{
+			QList<QTreeWidgetItem *> items;
+
+			z_listInfo = z_file->entryListInfo();
+			const int total = z_file->getNumEntries();
+
+			ui->lb_info->setText("Total de archivos: "+ QString::number(total));
+			ui->z_progress->setRange(0, total);
+			ui->z_progress->setValue(0);
+
+			for (int i = 0; i < total; ++i)
+			{
+				QString id = QString::number(i + 1);
+				ui->lb_items->setText(QString::number(total) +" "+ tr("de") +" "+ id);
+				ui->z_progress->setValue(i + 1);
+
+				QTreeWidgetItem *item = new QTreeWidgetItem;
+				item->setText(col_index    , id                                       );
+				item->setText(col_name     , z_listInfo.at(i).name                    );
+				item->setText(col_path     , z_listInfo[i].path                       );
+				item->setText(col_size     , QString::number(z_listInfo[i].size)      );
+				item->setText(col_packsize , QString::number(z_listInfo[i].packsize)  );
+				item->setText(col_crc32    , z_listInfo[i].crc32                      );
+				item->setText(col_encrypted, z_listInfo[i].encrypted ? "*" : ""       );
+				item->setText(col_isdir    , z_listInfo[i].isDir ? tr("si") : tr("no"));
+				items << item;
+			}
+
+			ui->tw_list_files->clear();
+			ui->tw_list_files->addTopLevelItems(items);
+		}
 	}
 }
