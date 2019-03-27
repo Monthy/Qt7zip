@@ -73,6 +73,7 @@ HEADERS += $$7ZIP_BASE/CPP/7zip/Common/FileStreams.h \
 # Qt7Zip wrapper --
 HEADERS += $$PWD/qt7zip.h \
     $$PWD/7zip_includes.h \
-    $$PWD/open_callback.h
+    $$PWD/open_callback.h \
+    $$PWD/extract_callback.h
 
 SOURCES += $$PWD/qt7zip.cpp

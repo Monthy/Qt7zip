@@ -45,7 +45,10 @@ MainWindow::MainWindow(QWidget *parent) :
 	z_file = new Qt7zip();
 	is_load_7zlib = z_file->isLoad7zLib();
 
-	qDebug() << "is_load_7zlib: " << is_load_7zlib;
+	if (is_load_7zlib)
+		 ui->lb_info->setText(tr("Libreria de 7-Zip cargada correctamente."));
+	else
+		 ui->lb_info->setText(tr("No se ha podido cargar la libreria de 7-Zip."));
 }
 
 MainWindow::~MainWindow()
@@ -82,18 +85,18 @@ void MainWindow::on_btn_abrir_clicked()
 			z_listInfo = z_file->entryListInfo();
 			const int total = z_file->getNumEntries();
 
-			ui->lb_info->setText("Total de archivos: "+ QString::number(total));
+			ui->lb_info->setText(tr("Total de archivos") +": "+ QString::number(total));
 			ui->z_progress->setRange(0, total);
 			ui->z_progress->setValue(0);
 
 			for (int i = 0; i < total; ++i)
 			{
-				QString id = QString::number(i + 1);
-				ui->lb_items->setText(QString::number(total) +" "+ tr("de") +" "+ id);
+				ui->lb_items->setText(QString::number(total) +" "+ tr("de") +" "+ QString::number(i + 1));
 				ui->z_progress->setValue(i + 1);
 
 				QTreeWidgetItem *item = new QTreeWidgetItem;
-				item->setText(col_index    , id                                       );
+				item->setCheckState(col_index, Qt::Unchecked);
+				item->setText(col_index    , QString::number(i)                       );
 				item->setText(col_name     , z_listInfo.at(i).name                    );
 				item->setText(col_path     , z_listInfo[i].path                       );
 				item->setText(col_size     , QString::number(z_listInfo[i].size)      );
@@ -106,6 +109,57 @@ void MainWindow::on_btn_abrir_clicked()
 
 			ui->tw_list_files->clear();
 			ui->tw_list_files->addTopLevelItems(items);
-		}
+		} else
+			ui->lb_info->setText("No se ha podido abrir el archivo.");
+	}
+}
+
+void MainWindow::on_btn_descomprimir_selected_clicked()
+{
+	if (is_load_7zlib)
+	{
+		if (z_file->isOpen())
+		{
+			QDir dir;
+			QString directorio = QFileDialog::getExistingDirectory(this, tr("Selecciona un directorio"), QDir::homePath(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+			if (!directorio.isEmpty() && dir.exists(directorio))
+			{
+				QList<szEntryExtract> listEntry;
+				const int count = ui->tw_list_files->topLevelItemCount();
+				for (int i = 0; i < count; ++i)
+				{
+					QTreeWidgetItem *item = ui->tw_list_files->topLevelItem(i);
+					if (item->checkState(col_index) == Qt::Checked)
+					{
+						szEntryExtract entry;
+							entry.index   = item->text(col_index).toInt();
+							entry.fileOut = item->text(col_path);
+						listEntry << entry;
+					}
+				}
+
+				z_file->extract(listEntry, directorio);
+			}
+		} else
+			ui->lb_info->setText("El archivo no esta abierto.");
+	}
+}
+
+void MainWindow::on_btn_descomprimir_all_clicked()
+{
+	if (is_load_7zlib)
+	{
+		if (z_file->isOpen())
+		{
+			QDir dir;
+			QString directorio = QFileDialog::getExistingDirectory(this, tr("Selecciona un directorio"), QDir::homePath(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+			if (!directorio.isEmpty() && dir.exists(directorio))
+			{
+				z_file->extract(directorio);
+			}
+		} else
+			ui->lb_info->setText("El archivo no esta abierto.");
 	}
 }

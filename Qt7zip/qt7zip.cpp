@@ -25,12 +25,15 @@
 
 #include "qt7zip.h"
 
+
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QInputDialog>
 #include <QCoreApplication>
 
 #include "open_callback.h"
+#include "extract_callback.h"
 
 // Define GUID
 // Tou can find the list of all GUIDs in Guid.txt file.
@@ -94,16 +97,6 @@ struct SevenZipInterface {
 	CMyComPtr<IInArchive> archive;
 	CMyComPtr<IOutArchive> outArchive;
 };
-
-static UString toUString(QString str)
-{
-	return str.toStdWString().c_str();
-}
-
-static QString toQString(UString str)
-{
-	return QString::fromWCharArray(str);
-}
 
 static GUID getFileType(const QString &fileName)
 {
@@ -442,4 +435,94 @@ szEntryInfo Qt7zip::getEntryInfo(const QString &fileName)
 	}
 
 	return entryInfo;
+}
+
+bool Qt7zip::extract(const QString &dirOut)
+{
+	if (!is_open)
+		return false;
+
+	UString m_dirOut = toUString(QDir::toNativeSeparators(dirOut));
+
+	CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
+	CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
+	extractCallbackSpec->Init(szInterface->archive, m_dirOut);
+
+	extractCallbackSpec->PasswordIsDefined = false;
+	if (!m_password.isEmpty())
+	{
+		extractCallbackSpec->PasswordIsDefined = true;
+		extractCallbackSpec->Password = toUString(m_password);
+	}
+
+	HRESULT result = szInterface->archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
+
+	if (result != S_OK)
+	{
+		PrintError("Extract Error");
+		return false;
+	}
+
+	return true;
+}
+
+bool Qt7zip::extract(const QString &fileName, const QString &dirOut, const QString &fileOut)
+{
+	int index = m_entryList.indexOf(fileName);
+	return extract(index, dirOut, fileOut);
+}
+
+bool Qt7zip::extract(const int indice, const QString &dirOut, const QString &fileOut)
+{
+	if (!is_open)
+		return false;
+
+	UString m_dirOut  = toUString(QDir::toNativeSeparators(dirOut));
+	UString m_fileOut = toUString(QDir::toNativeSeparators(fileOut));
+
+	if ((indice > -1) && (indice < m_entryTotal))
+	{
+	// Extract command
+		CArchiveExtractCallback *extractCallbackSpec = new CArchiveExtractCallback;
+		CMyComPtr<IArchiveExtractCallback> extractCallback(extractCallbackSpec);
+		extractCallbackSpec->Init(szInterface->archive, m_dirOut, m_fileOut);
+
+		extractCallbackSpec->PasswordIsDefined = false;
+		if (!m_password.isEmpty())
+		{
+			extractCallbackSpec->PasswordIsDefined = true;
+			extractCallbackSpec->Password = toUString(m_password);
+		}
+
+		quint32 index = indexToArchive[indice];
+		HRESULT result = szInterface->archive->Extract(&index, 1, false, extractCallback);
+
+		if (result != S_OK)
+		{
+			PrintError("Extract Error");
+			return false;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+bool Qt7zip::extract(QList<szEntryExtract> listEntry, const QString &dirOut)
+{
+	if (!is_open)
+		return false;
+
+	bool result = true;
+
+	const int listSize = listEntry.size();
+	for (int i = 0; i < listSize; ++i)
+	{
+		bool isOk = extract(listEntry.at(i).index, dirOut, listEntry.at(i).fileOut);
+		if (!isOk)
+			result = false;
+	}
+
+	return result;
 }

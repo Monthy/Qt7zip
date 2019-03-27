@@ -44,6 +44,11 @@ typedef struct {
 	bool    encrypted;
 } szEntryInfo;
 
+typedef struct {
+	int index;
+	QString fileOut;
+} szEntryExtract;
+
 class Qt7zip : public QObject
 {
 	Q_OBJECT
@@ -68,6 +73,11 @@ public:
 
 	int indexOf(const QRegExp &rx, int from = 0);
 	int indexOfNoDir(const QRegExp &rx, int from = 0);
+
+	bool extract(const QString &dirOut);
+	bool extract(const QString &fileName, const QString &dirOut, const QString &fileOut = "");
+	bool extract(const int indice, const QString &dirOut, const QString &fileOut = "");
+	bool extract(QList<szEntryExtract> listEntry, const QString &dirOut);
 
 private:
 	QLibrary *sevenzLib;

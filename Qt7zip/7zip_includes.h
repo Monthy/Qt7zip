@@ -79,4 +79,14 @@ static HRESULT IsArchiveItemFolder(IInArchive *archive, UInt32 index, bool &resu
 
 static const wchar_t *kEmptyFileAlias = L"[Content]";
 
+static UString toUString(QString str)
+{
+	return str.toStdWString().c_str();
+}
+
+static QString toQString(UString str)
+{
+	return QString::fromWCharArray(str);
+}
+
 #endif // _7ZIP_INCLUDES_H
