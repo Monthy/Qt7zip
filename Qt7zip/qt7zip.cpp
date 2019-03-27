@@ -25,7 +25,6 @@
 
 #include "qt7zip.h"
 
-
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
