@@ -33,6 +33,7 @@
 
 #include "open_callback.h"
 #include "extract_callback.h"
+#include "creating_callback.h"
 
 // Define GUID
 // Tou can find the list of all GUIDs in Guid.txt file.
@@ -524,4 +525,123 @@ bool Qt7zip::extract(QList<szEntryExtract> listEntry, const QString &dirOut)
 	}
 
 	return result;
+}
+
+bool Qt7zip::create(CompressFormat format, const QStringList &list_entry, const QString &fileName, const QString &password)
+{
+	GUID guid_format = CLSID_CFormat7z;
+	QString ext = "7z";
+	if (format == CFormatZip)
+	{
+		guid_format = CLSID_CFormatZip;
+		ext = "zip";
+	} else if(format == CFormatTar) {
+		guid_format = CLSID_CFormatTar;
+		ext = "tar";
+	}
+
+	QFileInfo f_info(fileName);
+	QString f_ext = f_info.suffix().toLower();
+
+	UString u_fileName = toUString(fileName);
+	if (ext != f_ext)
+		u_fileName = toUString(fileName +"."+ ext);
+
+	UString u_password = toUString(password);
+
+	if (list_entry.isEmpty())
+		return false;
+
+	CObjectVector<CDirItem> dirItems;
+	{
+		int i;
+		const int total_list_entry = list_entry.size();
+		for (i = 0; i < total_list_entry; ++i)
+		{
+			CDirItem di;
+			QString _name    = QFileInfo(list_entry.at(i)).fileName();
+			UString name     = toUString(_name);
+			UString fullPath = toUString(list_entry.at(i));
+
+			NFind::CFileInfo fi;
+			if (!fi.Find(fullPath))
+			{
+				PrintError("Can't find file", list_entry.at(i));
+				return false;
+			}
+
+			di.Attrib   = fi.Attrib;
+			di.Size     = fi.Size;
+			di.CTime    = fi.CTime;
+			di.ATime    = fi.ATime;
+			di.MTime    = fi.MTime;
+			di.Name     = name;
+			di.FullPath = fullPath;
+			dirItems.Add(di);
+		}
+
+		COutFileStream *outFileStreamSpec = new COutFileStream;
+		CMyComPtr<IOutStream> outFileStream = outFileStreamSpec;
+		if (!outFileStreamSpec->Create(u_fileName, false))
+		{
+			PrintError("can't create archive file");
+			return false;
+		}
+
+		if (szInterface->createObjectFunc(&guid_format, &IID_IOutArchive, (void **)&szInterface->outArchive) != S_OK)
+		{
+			PrintError("Can not get class object");
+			return false;
+		}
+
+		CArchiveUpdateCallback *updateCallbackSpec = new CArchiveUpdateCallback;
+		CMyComPtr<IArchiveUpdateCallback2> updateCallback(updateCallbackSpec);
+		updateCallbackSpec->Init(&dirItems);
+
+		if (!password.isEmpty())
+		{
+			updateCallbackSpec->PasswordIsDefined = true;
+			updateCallbackSpec->Password = u_password;
+		}
+
+/*		{
+			const wchar_t *names[] =
+			{
+				L"s",
+				L"x"
+			};
+			const unsigned kNumProps = ARRAY_SIZE(names);
+			NCOM::CPropVariant values[kNumProps] =
+			{
+				false,    // solid mode OFF
+				(UInt32)9 // compression level = 9 - ultra
+			};
+			CMyComPtr<ISetProperties> setProperties;
+			szInterface->outArchive->QueryInterface(IID_ISetProperties, (void **)&setProperties);
+			if (!setProperties)
+			{
+				PrintError("ISetProperties unsupported");
+				return false;
+			}
+			RINOK(setProperties->SetProperties(names, values, kNumProps));
+		}*/
+
+		HRESULT result = szInterface->outArchive->UpdateItems(outFileStream, dirItems.Size(), updateCallback);
+		updateCallbackSpec->Finilize();
+		if (result != S_OK)
+		{
+			PrintError("Update Error");
+			return false;
+		}
+
+		FOR_VECTOR (i, updateCallbackSpec->FailedFiles)
+		{
+			PrintError("Error for file", toQString(updateCallbackSpec->FailedFiles[i]));
+		}
+
+		if (updateCallbackSpec->FailedFiles.Size() != 0)
+			return false;
+	}
+
+	return true;
 }

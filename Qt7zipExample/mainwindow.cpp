@@ -163,3 +163,39 @@ void MainWindow::on_btn_descomprimir_all_clicked()
 			ui->lb_info->setText("El archivo no esta abierto.");
 	}
 }
+
+void MainWindow::on_btn_comprimir_clicked()
+{
+	if (is_load_7zlib)
+	{
+		QStringList lista_archivo = QFileDialog::getOpenFileNames(this, tr("Selecciona un archivo"), QDir::homePath(), tr("Todos los archivo") +" (*)", 0);
+
+		const int size = lista_archivo.size();
+		if (size > 0)
+		{
+			QStringList filters;
+			filters << "7-Zip - (*.7z)" << "Zip - (*.zip)" << "Tar - (*.tar)";
+
+			QString selectedFilter = filters.at(0);
+			QString archivo = QFileDialog::getSaveFileName(this, tr("Guardar como"), QDir::homePath(), filters.join(";;"), &selectedFilter);
+			if (!archivo.isEmpty() && filters.contains(selectedFilter))
+			{
+				int index = filters.indexOf(selectedFilter);
+				switch (index)
+				{
+					default:
+					case 0:
+						z_file->create(CFormat7z, lista_archivo, archivo);
+					break;
+					case 1:
+						z_file->create(CFormatZip, lista_archivo, archivo);
+					break;
+					case 2:
+						z_file->create(CFormatTar, lista_archivo, archivo);
+					break;
+				}
+			}
+		}
+	} else
+		ui->lb_info->setText("La libreria de 7zip no estan cargadas.");
+}
