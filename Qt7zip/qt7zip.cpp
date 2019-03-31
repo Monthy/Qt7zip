@@ -529,6 +529,25 @@ bool Qt7zip::extract(QList<szEntryExtract> listEntry, const QString &dirOut)
 
 bool Qt7zip::create(CompressFormat format, const QStringList &list_entry, const QString &fileName, const QString &password)
 {
+	szEntryCompress entry;
+	QList<szEntryCompress> list_entry_compress;
+	int i;
+	const int total_list_entry = list_entry.size();
+	for (i = 0; i < total_list_entry; ++i)
+	{
+		QString name  = QFileInfo(list_entry.at(i)).fileName();
+
+		entry.fileIn  = list_entry.at(i);
+		entry.fileOut = name;
+
+		list_entry_compress << entry;
+	}
+
+	return create(format, list_entry_compress, fileName, password);
+}
+
+bool Qt7zip::create(CompressFormat format, const QList<szEntryCompress> &list_entry, const QString &fileName, const QString &password)
+{
 	GUID guid_format = CLSID_CFormat7z;
 	QString ext = "7z";
 	if (format == CFormatZip)
@@ -553,20 +572,22 @@ bool Qt7zip::create(CompressFormat format, const QStringList &list_entry, const 
 		return false;
 
 	CObjectVector<CDirItem> dirItems;
+
 	{
+		szEntryCompress entry;
 		int i;
 		const int total_list_entry = list_entry.size();
 		for (i = 0; i < total_list_entry; ++i)
 		{
 			CDirItem di;
-			QString _name    = QFileInfo(list_entry.at(i)).fileName();
-			UString name     = toUString(_name);
-			UString fullPath = toUString(list_entry.at(i));
+
+			UString name     = toUString(list_entry.at(i).fileOut);
+			UString fullPath = toUString(list_entry.at(i).fileIn);
 
 			NFind::CFileInfo fi;
 			if (!fi.Find(fullPath))
 			{
-				PrintError("Can't find file", list_entry.at(i));
+				PrintError("Can't find file", list_entry.at(i).fileIn);
 				return false;
 			}
 

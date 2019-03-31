@@ -49,6 +49,12 @@ typedef struct {
 	QString fileOut;
 } szEntryExtract;
 
+typedef struct {
+	QString fileIn;
+	QString fileOut;
+} szEntryCompress;
+
+
 enum CompressFormat {
 	CFormat7z = 0,
 	CFormatZip = 1,
@@ -86,6 +92,7 @@ public:
 	bool extract(QList<szEntryExtract> listEntry, const QString &dirOut);
 
 	bool create(CompressFormat format, const QStringList &list_entry, const QString &fileName, const QString &password = "");
+	bool create(CompressFormat format, const QList<szEntryCompress> &list_entry, const QString &fileName, const QString &password = "");
 
 private:
 	QLibrary *sevenzLib;

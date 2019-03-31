@@ -24,6 +24,7 @@
 **/
 
 #include <QFileDialog>
+#include <QDirIterator>
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
@@ -198,4 +199,51 @@ void MainWindow::on_btn_comprimir_clicked()
 		}
 	} else
 		ui->lb_info->setText("La libreria de 7zip no estan cargadas.");
+}
+
+void MainWindow::on_btn_comprimir_directorio_clicked()
+{
+	if (is_load_7zlib)
+	{
+		QDir dir;
+		QString directorio = QFileDialog::getExistingDirectory(this, tr("Selecciona un directorio"), QDir::homePath(), QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+
+		if (!directorio.isEmpty() && dir.exists(directorio))
+		{
+			szEntryCompress entry;
+			QList<szEntryCompress> lista_archivo;
+
+			QDirIterator it(directorio, QDir::AllEntries | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+			while (it.hasNext())
+			{
+				QString entry_it = it.next();
+				entry.fileIn  = entry_it;
+				entry.fileOut = entry_it.remove(directorio +"/");
+				lista_archivo << entry;
+			}
+
+			QStringList filters;
+			filters << "7-Zip - (*.7z)" << "Zip - (*.zip)" << "Tar - (*.tar)";
+
+			QString selectedFilter = filters.at(0);
+			QString archivo = QFileDialog::getSaveFileName(this, tr("Guardar como"), QDir::homePath(), filters.join(";;"), &selectedFilter);
+			if (!archivo.isEmpty() && filters.contains(selectedFilter))
+			{
+				int index = filters.indexOf(selectedFilter);
+				switch (index)
+				{
+					default:
+					case 0:
+						z_file->create(CFormat7z, lista_archivo, archivo);
+					break;
+					case 1:
+						z_file->create(CFormatZip, lista_archivo, archivo);
+					break;
+					case 2:
+						z_file->create(CFormatTar, lista_archivo, archivo);
+					break;
+				}
+			}
+		}
+	}
 }

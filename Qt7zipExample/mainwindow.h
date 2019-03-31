@@ -69,6 +69,7 @@ private slots:
 	void on_btn_descomprimir_selected_clicked();
 	void on_btn_descomprimir_all_clicked();
 	void on_btn_comprimir_clicked();
+	void on_btn_comprimir_directorio_clicked();
 
 };
 
