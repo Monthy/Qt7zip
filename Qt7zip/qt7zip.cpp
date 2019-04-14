@@ -33,6 +33,7 @@
 
 #include "open_callback.h"
 #include "extract_callback.h"
+#include "extract_callback_raw.h"
 #include "creating_callback.h"
 
 // Define GUID
@@ -64,7 +65,7 @@ DEFINE_GUID(CLSID_CFormatArj , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x0
 //DEFINE_GUID(CLSID_CFormatWim     , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0xe6, 0x00, 0x00);
 //DEFINE_GUID(CLSID_CFormatZ       , 0x23170f69, 0x40c1, 0x278a, 0x10, 0x00, 0x00, 0x01, 0x10, 0x05, 0x00, 0x00);
 
-DEFINE_GUID(IID_InArchive          , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x06, 0x00, 0x60, 0x00, 0x00);
+//DEFINE_GUID(IID_InArchive          , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x06, 0x00, 0x60, 0x00, 0x00);
 //DEFINE_GUID(IID_IOutStream         , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x04, 0x00, 0x00);
 //DEFINE_GUID(IID_IInStream          , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x03, 0x00, 0x00);
 //DEFINE_GUID(IID_IStreamGetSize     , 0x23170F69, 0x40C1, 0x278A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x06, 0x00, 0x00);
@@ -292,7 +293,8 @@ bool Qt7zip::loadLib(const QString &fileName)
 		PrintError("Can not load 7-zip library", sevenzLib->errorString());
 		is_load_7zlib = false;
 	} else {
-		szInterface->createObjectFunc = (Func_CreateObject)sevenzLib->resolve("CreateObject");
+//		szInterface->createObjectFunc = (Func_CreateObject)sevenzLib->resolve("CreateObject");
+		szInterface->createObjectFunc = reinterpret_cast<Func_CreateObject>(sevenzLib->resolve("CreateObject"));
 		if (!szInterface->createObjectFunc)
 		{
 			PrintError("Can not get CreateObject");
@@ -322,7 +324,8 @@ bool Qt7zip::open(const QString &fileName, const QString &password)
 // Comprobamos la extension....
 	GUID guid_format = getFileType(fileName);
 
-	if (szInterface->createObjectFunc(&guid_format, &IID_IInArchive, (void **)&szInterface->archive) != S_OK)
+//	if (szInterface->createObjectFunc(&guid_format, &IID_IInArchive, (void **)&szInterface->archive) != S_OK)
+	if (szInterface->createObjectFunc(&guid_format, &IID_IInArchive, reinterpret_cast<void **>(&szInterface->archive)) != S_OK)
 	{
 		PrintError("Can not get class object");
 		is_open = false;
@@ -380,6 +383,7 @@ bool Qt7zip::open(const QString &fileName, const QString &password)
 		entryInfo.packsize  = getProperty(szInterface->archive, i, kpidPackSize).toUInt();
 		entryInfo.isDir     = getProperty(szInterface->archive, i, kpidIsDir).toBool();
 		entryInfo.encrypted = getProperty(szInterface->archive, i, kpidEncrypted).toBool();
+	//	entryInfo.data      = "";
 
 		if (entryInfo.encrypted && !is_encrypted)
 			is_encrypted = true;
@@ -428,6 +432,7 @@ szEntryInfo Qt7zip::getEntryInfo(const QString &fileName)
 	entryInfo.packsize  = 0;
 	entryInfo.isDir     = false;
 	entryInfo.encrypted = false;
+//	entryInfo.data      = "";
 
 	if (is_open && !m_ArchiveList.isEmpty())
 	{
@@ -455,7 +460,8 @@ bool Qt7zip::extract(const QString &dirOut)
 		extractCallbackSpec->Password = toUString(m_password);
 	}
 
-	HRESULT result = szInterface->archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
+//	HRESULT result = szInterface->archive->Extract(NULL, (UInt32)(Int32)(-1), false, extractCallback);
+	HRESULT result = szInterface->archive->Extract(NULL, static_cast<UInt32>(-1), false, extractCallback);
 
 	if (result != S_OK)
 	{
@@ -527,6 +533,95 @@ bool Qt7zip::extract(QList<szEntryExtract> listEntry, const QString &dirOut)
 	return result;
 }
 
+bool Qt7zip::extractRaw(const QString &fileName, QByteArray &data)
+{
+	int index = m_entryList.indexOf(fileName);
+	return extractRaw(index, data);
+}
+
+bool Qt7zip::extractRaw(const int indice, QByteArray &data)
+{
+	data = QByteArray();
+
+	if (!is_open)
+		return false;
+
+	if ((indice > -1) && (indice < m_entryTotal))
+	{
+	// Extract command
+		CArchiveExtractCallbackRaw *extractCallbackSpecRaw = new CArchiveExtractCallbackRaw();
+		CMyComPtr<IArchiveExtractCallback> extractCallbackRaw(extractCallbackSpecRaw);
+		extractCallbackSpecRaw->Init(szInterface->archive);
+
+		extractCallbackSpecRaw->PasswordIsDefined = false;
+		if (!m_password.isEmpty())
+		{
+			extractCallbackSpecRaw->PasswordIsDefined = true;
+			extractCallbackSpecRaw->Password = toUString(m_password);
+		}
+
+		quint32 index = indexToArchive[indice];
+		HRESULT result = szInterface->archive->Extract(&index, 1, false, extractCallbackRaw);
+
+		if (result != S_OK)
+		{
+			PrintError("Extract Error");
+			return false;
+		}
+
+//		data = QByteArray((char *)extractCallbackSpecRaw->data, extractCallbackSpecRaw->newFileSize);
+		data = QByteArray(reinterpret_cast<char *>(extractCallbackSpecRaw->data), static_cast<int>(extractCallbackSpecRaw->newFileSize));
+		return true;
+	}
+
+	return false;
+}
+
+QList<QByteArray> Qt7zip::extractRaw(const QList<int> indices)
+{
+	QList<QByteArray> listRaw;
+
+	if (!is_open)
+		return listRaw;
+
+// Extract command
+	CArchiveExtractCallbackRaw *extractCallbackSpecRaw = new CArchiveExtractCallbackRaw(true);
+	CMyComPtr<IArchiveExtractCallback> extractCallbackRaw(extractCallbackSpecRaw);
+	extractCallbackSpecRaw->Init(szInterface->archive);
+
+	QMap<quint32, quint32> ordenIndexes;
+	const int countIndices = indices.size();
+	for (int i = 0; i < countIndices; ++i)
+	{
+		quint32 valor = indexToArchive[indices.at(i)];
+		ordenIndexes.insert(valor, valor);
+	}
+
+	QVector<quint32> currentIndexes;
+	foreach (quint32 index, ordenIndexes)
+	{
+		currentIndexes.append(index);
+	}
+
+	HRESULT result;
+	if (currentIndexes.isEmpty())
+		result = szInterface->archive->Extract(NULL, static_cast<UInt32>(-1), false, extractCallbackRaw);
+	else
+		result = szInterface->archive->Extract(currentIndexes.data(), static_cast<UInt32>(currentIndexes.count()), false, extractCallbackRaw);
+
+//	m_entryListInfoRaw.clear();
+//	const int countFileRawInfo = extractCallbackSpecRaw->allFileInfoRaw.size();
+//	for (int i = 0; i < countFileRawInfo; ++i)
+//	{
+//		szEntryInfo entryInfo = getEntryInfo(extractCallbackSpecRaw->allFileInfoRaw.at(i).path);
+//		entryInfo.data = extractCallbackSpecRaw->allFileInfoRaw.at(i).data;
+//
+//		m_entryListInfoRaw << entryInfo;
+//	}
+
+	return extractCallbackSpecRaw->allFilesRaw;
+}
+
 bool Qt7zip::create(CompressFormat format, const QStringList &list_entry, const QString &fileName, const QString &password)
 {
 	szEntryCompress entry;
@@ -554,7 +649,7 @@ bool Qt7zip::create(CompressFormat format, const QList<szEntryCompress> &list_en
 	{
 		guid_format = CLSID_CFormatZip;
 		ext = "zip";
-	} else if(format == CFormatTar) {
+	} else if (format == CFormatTar) {
 		guid_format = CLSID_CFormatTar;
 		ext = "tar";
 	}
@@ -609,7 +704,8 @@ bool Qt7zip::create(CompressFormat format, const QList<szEntryCompress> &list_en
 			return false;
 		}
 
-		if (szInterface->createObjectFunc(&guid_format, &IID_IOutArchive, (void **)&szInterface->outArchive) != S_OK)
+//		if (szInterface->createObjectFunc(&guid_format, &IID_IOutArchive, (void **)&szInterface->outArchive) != S_OK)
+		if (szInterface->createObjectFunc(&guid_format, &IID_IOutArchive, reinterpret_cast<void **>(&szInterface->outArchive)) != S_OK)
 		{
 			PrintError("Can not get class object");
 			return false;

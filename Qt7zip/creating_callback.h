@@ -26,8 +26,6 @@
 #ifndef CREATING_CALLBACK_H
 #define CREATING_CALLBACK_H
 
-#include <QDebug>
-
 #include "7zip_includes.h"
 
 // Archive Creating callback class

@@ -25,6 +25,7 @@
 
 #include <QFileDialog>
 #include <QDirIterator>
+#include <QTextCodec>
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
@@ -34,6 +35,12 @@ MainWindow::MainWindow(QWidget *parent) :
 	ui(new Ui::MainWindow)
 {
 	ui->setupUi(this);
+
+	ext_z << "*.7z" << "*.zip" << "*.tar" << "*.rar";
+	ext_comic << "*.cb7" << "*.cbz" << "*.cbt" << "*.cbr";
+	ext_img << ".jpg" << ".jpeg" << ".png" << ".gif" << ".tiff" << ".tif" << ".bmp";
+	ext_txt << ".xml" << ".txt" << ".ini" << ".conf" << ".cpp" << ".h";
+
 
 	// Configuración del tw_list_files
 	ui->tw_list_files->header()->setStretchLastSection(false);
@@ -58,61 +65,121 @@ MainWindow::~MainWindow()
 	delete ui;
 }
 
-void MainWindow::on_btn_seleccioar_archivo_clicked()
+void MainWindow::seleccioar_archivo()
 {
-	QString ext_z = "*.7z *.zip *.rar *.tar";
-	QString ext_comic = "*.cb7 *.cbz *.cbr *.cbt";
-
-	QString archivo = QFileDialog::getOpenFileName(this, tr("Selecciona un archivo"), QDir::homePath(),
-				tr("Archivos soportados") +" - ("+ ext_z +" "+ ext_comic +");;"+
-				tr("Archivos comprimidos") +" - ("+ ext_z +");;"+
-				tr("Comic") +" - ("+ ext_comic +");;"+
-				tr("Todos los archivo") +" (*)", 0);
-
-	if (!archivo.isEmpty() && QFile::exists(archivo))
+	if (is_load_7zlib)
 	{
-		ui->txt_file->setText(archivo);
+		QString archivo = ui->txt_file->text();
+
+	//	if (archivo.isEmpty() || !QFile::exists(archivo))
+	//	{
+			archivo = QFileDialog::getOpenFileName(this, tr("Selecciona un archivo"), QDir::homePath(),
+						tr("Archivos soportados") +" - ("+ ext_z.join(" ") +" "+ ext_comic.join(" ") +");;"+
+						tr("Archivos comprimidos") +" - ("+ ext_z.join(" ") +");;"+
+						tr("Comic") +" - ("+ ext_comic.join(" ") +");;"+
+						tr("Todos los archivo") +" (*)", 0);
+	//	}
+
+		if (!archivo.isEmpty() && QFile::exists(archivo))
+		{
+			ui->txt_file->setText(archivo);
+
+			if (z_file->open(ui->txt_file->text(), ui->txt_pass->text()))
+			{
+				QList<QTreeWidgetItem *> items;
+
+				z_listInfo = z_file->entryListInfo();
+				const int total = z_file->getNumEntries();
+
+				ui->lb_info->setText(tr("Total de archivos") +": "+ QString::number(total));
+				ui->z_progress->setRange(0, total);
+				ui->z_progress->setValue(0);
+
+				for (int i = 0; i < total; ++i)
+				{
+					ui->lb_items->setText(QString::number(total) +" "+ tr("de") +" "+ QString::number(i + 1));
+					ui->z_progress->setValue(i + 1);
+
+					QTreeWidgetItem *item = new QTreeWidgetItem;
+					item->setCheckState(col_index, Qt::Unchecked);
+					item->setText(col_index    , QString::number(i)                       );
+					item->setText(col_name     , z_listInfo.at(i).name                    );
+					item->setText(col_path     , z_listInfo[i].path                       );
+					item->setText(col_size     , QString::number(z_listInfo[i].size)      );
+					item->setText(col_packsize , QString::number(z_listInfo[i].packsize)  );
+					item->setText(col_crc32    , z_listInfo[i].crc32                      );
+					item->setText(col_encrypted, z_listInfo[i].encrypted ? "*" : ""       );
+					item->setText(col_isdir    , z_listInfo[i].isDir ? tr("si") : tr("no"));
+					items << item;
+				}
+
+				ui->tw_list_files->clear();
+				ui->tw_list_files->addTopLevelItems(items);
+			} else
+				ui->lb_info->setText("No se ha podido abrir el archivo.");
+		}
 	}
+}
+
+void MainWindow::descomprimir_raw(bool extract_all)
+{
+	if (is_load_7zlib)
+	{
+		if (z_file->isOpen())
+		{
+			QList<int> list_select_extract_raw;
+			const int count = ui->tw_list_files->topLevelItemCount();
+			for (int i = 0; i < count; ++i)
+			{
+				QTreeWidgetItem *item = ui->tw_list_files->topLevelItem(i);
+				if (extract_all || item->checkState(col_index) == Qt::Checked)
+				{
+					list_select_extract_raw << item->text(col_index).toInt();
+				}
+			}
+
+			z_list_raw.clear();
+			z_list_raw = z_file->extractRaw(list_select_extract_raw);
+
+			QList<QTreeWidgetItem *> itemsRaw;
+			const int countRaw = z_list_raw.size();
+			for (int i = 0; i < countRaw; ++i)
+			{
+				QTreeWidgetItem *itemRaw = new QTreeWidgetItem;
+				itemRaw->setText(col_index, QString::number(i));
+				itemRaw->setText(col_name, "Item raw "+ QString::number(i));
+				itemsRaw << itemRaw;
+			}
+
+			ui->tw_list_files_raw->clear();
+			ui->tw_list_files_raw->addTopLevelItems(itemsRaw);
+		} else
+			ui->lb_info->setText("El archivo no esta abierto.");
+	}
+}
+
+QString MainWindow::leerDataRaw(QByteArray data) const
+{
+	QTextCodec::ConverterState state;
+	QTextCodec *codec = QTextCodec::codecForName("UTF-8");
+
+	const QString text = codec->toUnicode(data.constData(), data.size(), &state);
+	if (state.invalidChars > 0)
+	{
+		// Not a UTF-8 text - using system default locale
+		QTextCodec *codec = QTextCodec::codecForLocale();
+		if (!codec)
+			return text;
+
+		return codec->toUnicode(data);
+	}
+
+	return text;
 }
 
 void MainWindow::on_btn_abrir_clicked()
 {
-	if (is_load_7zlib)
-	{
-		if (z_file->open(ui->txt_file->text(), ui->txt_pass->text()))
-		{
-			QList<QTreeWidgetItem *> items;
-
-			z_listInfo = z_file->entryListInfo();
-			const int total = z_file->getNumEntries();
-
-			ui->lb_info->setText(tr("Total de archivos") +": "+ QString::number(total));
-			ui->z_progress->setRange(0, total);
-			ui->z_progress->setValue(0);
-
-			for (int i = 0; i < total; ++i)
-			{
-				ui->lb_items->setText(QString::number(total) +" "+ tr("de") +" "+ QString::number(i + 1));
-				ui->z_progress->setValue(i + 1);
-
-				QTreeWidgetItem *item = new QTreeWidgetItem;
-				item->setCheckState(col_index, Qt::Unchecked);
-				item->setText(col_index    , QString::number(i)                       );
-				item->setText(col_name     , z_listInfo.at(i).name                    );
-				item->setText(col_path     , z_listInfo[i].path                       );
-				item->setText(col_size     , QString::number(z_listInfo[i].size)      );
-				item->setText(col_packsize , QString::number(z_listInfo[i].packsize)  );
-				item->setText(col_crc32    , z_listInfo[i].crc32                      );
-				item->setText(col_encrypted, z_listInfo[i].encrypted ? "*" : ""       );
-				item->setText(col_isdir    , z_listInfo[i].isDir ? tr("si") : tr("no"));
-				items << item;
-			}
-
-			ui->tw_list_files->clear();
-			ui->tw_list_files->addTopLevelItems(items);
-		} else
-			ui->lb_info->setText("No se ha podido abrir el archivo.");
-	}
+	seleccioar_archivo();
 }
 
 void MainWindow::on_btn_descomprimir_selected_clicked()
@@ -160,6 +227,30 @@ void MainWindow::on_btn_descomprimir_all_clicked()
 			{
 				z_file->extract(directorio);
 			}
+		} else
+			ui->lb_info->setText("El archivo no esta abierto.");
+	}
+}
+
+void MainWindow::on_btn_descomprimir_selected_raw_clicked()
+{
+	if (is_load_7zlib)
+	{
+		if (z_file->isOpen())
+		{
+			descomprimir_raw();
+		} else
+			ui->lb_info->setText("El archivo no esta abierto.");
+	}
+}
+
+void MainWindow::on_btn_descomprimir_all_raw_clicked()
+{
+	if (is_load_7zlib)
+	{
+		if (z_file->isOpen())
+		{
+			descomprimir_raw(true);
 		} else
 			ui->lb_info->setText("El archivo no esta abierto.");
 	}
@@ -244,6 +335,69 @@ void MainWindow::on_btn_comprimir_directorio_clicked()
 					break;
 				}
 			}
+		}
+	}
+}
+
+void MainWindow::on_tw_list_files_itemClicked(QTreeWidgetItem *item, int column)
+{
+	if (item && column > -1)
+	{
+		if (is_load_7zlib)
+		{
+			if (z_file->isOpen())
+			{
+				QFileInfo f_info(item->text(col_name));
+				QString ext = "."+ f_info.suffix().toLower();
+
+				int index = item->text(col_index).toInt();
+				QByteArray data;
+
+				bool esImagen = ext_img.contains(ext, Qt::CaseInsensitive);
+				bool esTxt    = ext_txt.contains(ext, Qt::CaseInsensitive);
+
+				if (esImagen || esTxt)
+				{
+					if (z_file->extractRaw(index, data))
+					{
+						if (esImagen)
+						{
+							QPixmap px;
+							px.loadFromData(data);
+							ui->lb_pixmap->setPixmap(px);
+						}
+
+						if (esTxt)
+						{
+							ui->txt_info->setPlainText(leerDataRaw(data));
+
+					//		QTextStream z_txt_in(data);
+					//		z_txt_in.setAutoDetectUnicode(true);
+					//	//	z_txt_in.setCodec(QTextCodec::codecForName("ISO 8859-1")); //ANSI
+					//	//	z_txt_in.setCodec(QTextCodec::codecForName("UTF-8"));
+					//		ui->txt_info->setPlainText(z_txt_in.readAll());
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+void MainWindow::on_tw_list_files_raw_itemClicked(QTreeWidgetItem *item, int column)
+{
+	if (item && column > -1)
+	{
+		if (!z_list_raw.isEmpty())
+		{
+			int index = item->text(col_index).toInt();
+			QByteArray data = z_list_raw.at(index);
+
+			QPixmap px;
+			if (px.loadFromData(data))
+				ui->lb_pixmap->setPixmap(px);
+			else
+				ui->txt_info->setPlainText(leerDataRaw(data));
 		}
 	}
 }

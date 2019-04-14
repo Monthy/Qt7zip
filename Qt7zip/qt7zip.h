@@ -42,6 +42,7 @@ typedef struct {
 	quint64 packsize;
 	bool    isDir;
 	bool    encrypted;
+//	QByteArray data;
 } szEntryInfo;
 
 typedef struct {
@@ -82,6 +83,7 @@ public:
 
 	QStringList entryList() { return m_entryList; }
 	QList<szEntryInfo> entryListInfo() { return m_entryListInfo; }
+//	QList<szEntryInfo> entryListInfoRaw() { return m_entryListInfoRaw; }
 
 	int indexOf(const QRegExp &rx, int from = 0);
 	int indexOfNoDir(const QRegExp &rx, int from = 0);
@@ -90,6 +92,10 @@ public:
 	bool extract(const QString &fileName, const QString &dirOut, const QString &fileOut = "");
 	bool extract(const int indice, const QString &dirOut, const QString &fileOut = "");
 	bool extract(QList<szEntryExtract> listEntry, const QString &dirOut);
+
+	bool extractRaw(const QString &fileName, QByteArray &data);
+	bool extractRaw(const int indice, QByteArray &data);
+	QList<QByteArray> extractRaw(const QList<int> indices);
 
 	bool create(CompressFormat format, const QStringList &list_entry, const QString &fileName, const QString &password = "");
 	bool create(CompressFormat format, const QList<szEntryCompress> &list_entry, const QString &fileName, const QString &password = "");
@@ -104,7 +110,7 @@ private:
 	QString m_password, m_comment;
 	QStringList m_entryList;
 	QList<szEntryInfo> m_entryListInfo;
-
+//	QList<szEntryInfo> m_entryListInfoRaw;
 
 	QMap<int, quint32> indexToArchive;
 	QMap<QString, szEntryInfo> m_ArchiveList;

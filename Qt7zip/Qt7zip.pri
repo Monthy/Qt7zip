@@ -75,6 +75,7 @@ HEADERS += $$PWD/qt7zip.h \
     $$PWD/7zip_includes.h \
     $$PWD/open_callback.h \
     $$PWD/extract_callback.h \
+    $$PWD/extract_callback_raw.h \
     $$PWD/creating_callback.h
 
 SOURCES += $$PWD/qt7zip.cpp

@@ -3,6 +3,7 @@
  * Qt7zip
  *
  * This file is part of Qt7zip is a C++ wrapper for accessing the 7-zip API
+ * based in extract_callbacks.h by https://github.com/YACReader/yacreader
  * Copyright (C) 2019 Pedro A. Garcia Rosado Aka Monthy
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,14 +24,14 @@
  *
 **/
 
-#ifndef EXTRACT_CALLBACK_H
-#define EXTRACT_CALLBACK_H
+#ifndef EXTRACT_CALLBACK_RAW_H
+#define EXTRACT_CALLBACK_RAW_H
 
 #include "7zip_includes.h"
 
-// Archive Extracting callback class
+// Archive Extracting callback Memory class
 //---------------------------------------------------------------------------------------------------------------
-class CArchiveExtractCallback:
+class CArchiveExtractCallbackRaw:
 	public IArchiveExtractCallback,
 	public ICryptoGetTextPassword,
 	public CMyUnknownImp
@@ -50,13 +51,21 @@ public:
 // ICryptoGetTextPassword
 	STDMETHOD(CryptoGetTextPassword)(BSTR *aPassword);
 
+//	struct CFileInfoRaw
+//	{
+//		QString path;
+//		QByteArray data;
+//	} _fileInfoRaw;
+
 private:
 	CMyComPtr<IInArchive> _archiveHandler;
-	FString _directoryPath; // Output directory
+	UString _directoryPath; // Output directory
 	UString _filePath;      // name inside arcvhive
-	FString _diskFilePath;  // full path to file on disk
-	UString _fileName;
+	UString _diskFilePath;  // full path to file on disk
 	bool _extractMode;
+
+	bool _multiExtract;
+	UInt32 _index;
 
 	struct CProcessedFileInfo
 	{
@@ -67,44 +76,51 @@ private:
 		bool MTimeDefined;
 	} _processedFileInfo;
 
-	COutFileStream *_outFileStreamSpec;
+//	COutFileStream *_outFileStreamSpec;
 	CMyComPtr<ISequentialOutStream> _outFileStream;
 
 public:
-	void Init(IInArchive *archiveHandler, const FString &directoryPath, const UString &fileName = L"");
+	void Init(IInArchive *archiveHandler);
 
 	UInt64 NumErrors;
 	bool PasswordIsDefined;
 	UString Password;
 
-	CArchiveExtractCallback() : PasswordIsDefined(false) {}
+	QList<QByteArray> allFilesRaw;
+//	QList<CFileRawInfo> allFileInfoRaw;
+	Byte *data;
+	UInt64 newFileSize;
+
+	CArchiveExtractCallbackRaw(bool multiExtract = false) :
+		_multiExtract(multiExtract), _index(0), PasswordIsDefined(false){}
+
+	virtual ~CArchiveExtractCallbackRaw() { MidFree(data); }
 };
 
-void CArchiveExtractCallback::Init(IInArchive *archiveHandler, const FString &directoryPath, const UString &fileName)
+void CArchiveExtractCallbackRaw::Init(IInArchive *archiveHandler)
 {
 	NumErrors = 0;
 	_archiveHandler = archiveHandler;
-	_directoryPath = directoryPath;
-	_fileName = fileName;
-
-	NName::NormalizeDirPathPrefix(_directoryPath);
+//	directoryPath;//unused
 }
 
-STDMETHODIMP CArchiveExtractCallback::SetTotal(UInt64 /* size */)
+STDMETHODIMP CArchiveExtractCallbackRaw::SetTotal(UInt64 /* size */)
 {
 	return S_OK;
 }
 
-STDMETHODIMP CArchiveExtractCallback::SetCompleted(const UInt64 * /* completeValue */)
+STDMETHODIMP CArchiveExtractCallbackRaw::SetCompleted(const UInt64 * /* completeValue */)
 {
 	return S_OK;
 }
 
-STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index,
+STDMETHODIMP CArchiveExtractCallbackRaw::GetStream(UInt32 index,
 	ISequentialOutStream **outStream, Int32 askExtractMode)
 {
 	*outStream = 0;
 	_outFileStream.Release();
+
+	_index = index;
 
 	{
 	// Get Name
@@ -122,11 +138,9 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index,
 		_filePath = fullPath;
 	}
 
-	if (!_fileName.IsEmpty())
-		_filePath = _fileName;
-
-	if (askExtractMode != NArchive::NExtract::NAskMode::kExtract)
-		return S_OK;
+	Q_UNUSED(askExtractMode);//unused
+//	if (askExtractMode != NArchive::NExtract::NAskMode::kExtract)
+//		return S_OK;
 
 	{
 	// Get Attrib
@@ -165,52 +179,67 @@ STDMETHODIMP CArchiveExtractCallback::GetStream(UInt32 index,
 		}
 	}
 
+// Se necesita conocer el tamaño del archivo para poder reservar suficiente memoria
+	bool newFileSizeDefined;
 	{
 	// Get Size
 		NCOM::CPropVariant prop;
 		RINOK(_archiveHandler->GetProperty(index, kpidSize, &prop));
-		UInt64 newFileSize;
-		/* bool newFileSizeDefined = */ ConvertPropVariantToUInt64(prop, newFileSize);
+		newFileSizeDefined = (prop.vt != VT_EMPTY);
+//		UInt64 newFileSize;
+		if (newFileSizeDefined)
+			ConvertPropVariantToUInt64(prop, newFileSize);
 	}
 
-	{
-	// Create folders for file
-		int slashPos = _filePath.ReverseFind_PathSepar();
-		if (slashPos >= 0)
-			CreateComplexDir(_directoryPath + us2fs(_filePath.Left(slashPos)));
-	}
+// No hay que crear ningún fichero, ni directorios intermedios
+//	{
+//		// Create folders for file
+//		int slashPos = _filePath.ReverseFind_PathSepar();
+//		if (slashPos >= 0)
+//			CreateComplexDir(_directoryPath + us2fs(_filePath.Left(slashPos)));
+//	}
 
-	FString fullProcessedPath = _directoryPath + us2fs(_filePath);
-	_diskFilePath = fullProcessedPath;
+//	FString fullProcessedPath = _directoryPath + us2fs(_filePath);
+//	_diskFilePath = fullProcessedPath;
 
 	if (_processedFileInfo.isDir)
 	{
-		CreateComplexDir(fullProcessedPath);
+//		CreateComplexDir(fullProcessedPath);
 	} else {
-		NFind::CFileInfo fi;
-		if (fi.Find(fullProcessedPath))
-		{
-			if (!DeleteFileAlways(fullProcessedPath))
-			{
-				PrintError("Can not delete output file", toQString(fullProcessedPath));
-				return E_ABORT;
-			}
-		}
+//		NFind::CFileInfo fi;
+//		if (fi.Find(fullProcessedPath))
+//		{
+//			if (!DeleteFileAlways(fullProcessedPath))
+//			{
+//				PrintError("Can not delete output file", QString::fromWCharArray(fullProcessedPath));
+//				return E_ABORT;
+//			}
+//		}
 
-		_outFileStreamSpec = new COutFileStream;
-		CMyComPtr<ISequentialOutStream> outStreamLoc(_outFileStreamSpec);
-		if (!_outFileStreamSpec->Open(fullProcessedPath, CREATE_ALWAYS))
+		if (newFileSizeDefined)
 		{
-			PrintError("Can not open output file", toQString(fullProcessedPath));
-			return E_ABORT;
+			CBufPtrSeqOutStream *outStreamSpec = new CBufPtrSeqOutStream;
+			CMyComPtr<CBufPtrSeqOutStream> outStreamLoc(outStreamSpec);
+		//	data = (Byte *)MidAlloc(newFileSize);
+			data = reinterpret_cast<Byte *>(MidAlloc(newFileSize));
+			outStreamSpec->Init(data, newFileSize);
+			*outStream = outStreamLoc.Detach();
+
+//			_outFileStreamSpec = new COutFileStream;
+//			CMyComPtr<ISequentialOutStream> outStreamLoc(_outFileStreamSpec);
+//			if (!_outFileStreamSpec->Open(fullProcessedPath, CREATE_ALWAYS))
+//			{
+//				PrintError("Can not open output file", QString::fromWCharArray(fullProcessedPath));
+//				return E_ABORT;
+//			}
+//			_outFileStream = outStreamLoc;
+//			*outStream = outStreamLoc.Detach();
 		}
-		_outFileStream = outStreamLoc;
-		*outStream = outStreamLoc.Detach();
 	}
 	return S_OK;
 }
 
-STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
+STDMETHODIMP CArchiveExtractCallbackRaw::PrepareOperation(Int32 askExtractMode)
 {
 	_extractMode = false;
 	switch (askExtractMode)
@@ -218,23 +247,35 @@ STDMETHODIMP CArchiveExtractCallback::PrepareOperation(Int32 askExtractMode)
 		case NArchive::NExtract::NAskMode::kExtract: _extractMode = true; break;
 	};
 
-	QString msgExtract = "";
-	switch (askExtractMode)
-	{
-		case NArchive::NExtract::NAskMode::kExtract: msgExtract = "Extracting: "; break;
-		case NArchive::NExtract::NAskMode::kTest: msgExtract = "Testing: "; break;
-		case NArchive::NExtract::NAskMode::kSkip: msgExtract = "Skipping: "; break;
-	};
+//	QString msgExtract = "";
+//	switch (askExtractMode)
+//	{
+//		case NArchive::NExtract::NAskMode::kExtract: msgExtract = "Extracting: "; break;
+//		case NArchive::NExtract::NAskMode::kTest: msgExtract = "Testing: "; break;
+//		case NArchive::NExtract::NAskMode::kSkip: msgExtract = "Skipping: "; break;
+//	};
 
-	PrintString(msgExtract + toQString(_filePath));
+//	PrintString(msgExtract + QString::fromWCharArray(_filePath));
 	return S_OK;
 }
 
-STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 operationResult)
+STDMETHODIMP CArchiveExtractCallbackRaw::SetOperationResult(Int32 operationResult)
 {
 	switch (operationResult)
 	{
 		case NArchive::NExtract::NOperationResult::kOK:
+			if (_multiExtract && !_processedFileInfo.isDir)
+			{
+//				QByteArray rawData((char *)data, newFileSize);
+				QByteArray rawData(reinterpret_cast<char *>(data), static_cast<int>(newFileSize));
+				MidFree(data);
+				data = 0;
+				allFilesRaw.append(rawData);
+
+			//	_fileInfoRaw.path = toQString(_filePath);
+			//	_fileInfoRaw.data = rawData;
+			//	allFileInfoRaw.append(_fileRawInfo);
+			}
 			break;
 		default:
 		{
@@ -277,23 +318,23 @@ STDMETHODIMP CArchiveExtractCallback::SetOperationResult(Int32 operationResult)
 		}
 	}
 
-	if (_outFileStream)
-	{
-		if (_processedFileInfo.MTimeDefined)
-			_outFileStreamSpec->SetMTime(&_processedFileInfo.MTime);
-		RINOK(_outFileStreamSpec->Close());
-	}
+//	if (_outFileStream)
+//	{
+//		if (_processedFileInfo.MTimeDefined)
+//			_outFileStreamSpec->SetMTime(&_processedFileInfo.MTime);
+//		RINOK(_outFileStreamSpec->Close());
+//	}
 
-	_outFileStream.Release();
-	if (_extractMode && _processedFileInfo.AttribDefined)
-		SetFileAttrib(_diskFilePath, _processedFileInfo.Attrib);
+//	_outFileStream.Release();
+//	if (_extractMode && _processedFileInfo.AttribDefined)
+//		SetFileAttrib(_diskFilePath, _processedFileInfo.Attrib);
 
-	PrintNewLine();
+//	PrintNewLine();
 
 	return S_OK;
 }
 
-STDMETHODIMP CArchiveExtractCallback::CryptoGetTextPassword(BSTR *password)
+STDMETHODIMP CArchiveExtractCallbackRaw::CryptoGetTextPassword(BSTR *password)
 {
 	if (!PasswordIsDefined)
 	{
@@ -306,4 +347,4 @@ STDMETHODIMP CArchiveExtractCallback::CryptoGetTextPassword(BSTR *password)
 	return StringToBstr(Password, password);
 }
 
-#endif // EXTRACT_CALLBACK_H
+#endif // EXTRACT_CALLBACK_RAW_H

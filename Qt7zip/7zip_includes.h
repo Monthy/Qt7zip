@@ -28,6 +28,7 @@
 
 #include <QDebug>
 #include <QString>
+#include <QByteArray>
 
 #include "StdAfx.h"
 

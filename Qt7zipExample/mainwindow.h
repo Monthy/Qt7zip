@@ -28,6 +28,7 @@
 
 #include <QDebug>
 #include <QMainWindow>
+#include <QTreeWidgetItem>
 
 #include "qt7zip.h"
 
@@ -61,15 +62,24 @@ private:
 	Qt7zip *z_file;
 
 	QList<szEntryInfo> z_listInfo;
+	QList<QByteArray> z_list_raw;
 	bool is_load_7zlib;
+	QStringList ext_z, ext_img, ext_txt, ext_comic;
+
+	void seleccioar_archivo();
+	void descomprimir_raw(bool extract_all = false);
+	QString leerDataRaw(QByteArray data) const;
 
 private slots:
-	void on_btn_seleccioar_archivo_clicked();
 	void on_btn_abrir_clicked();
 	void on_btn_descomprimir_selected_clicked();
 	void on_btn_descomprimir_all_clicked();
+	void on_btn_descomprimir_selected_raw_clicked();
+	void on_btn_descomprimir_all_raw_clicked();
 	void on_btn_comprimir_clicked();
 	void on_btn_comprimir_directorio_clicked();
+	void on_tw_list_files_itemClicked(QTreeWidgetItem *item, int column);
+	void on_tw_list_files_raw_itemClicked(QTreeWidgetItem *item, int column);
 
 };
 
