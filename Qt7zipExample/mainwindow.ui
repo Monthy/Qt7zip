@@ -35,7 +35,7 @@
     <item row="0" column="2">
      <widget class="QLabel" name="lb_pass">
       <property name="text">
-       <string>Contraseña:</string>
+       <string>ContraseĂ±a:</string>
       </property>
      </widget>
     </item>
