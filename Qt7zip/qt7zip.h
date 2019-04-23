@@ -77,6 +77,8 @@ public:
 	bool isOpen() { return is_open; }
 	bool isEncrypted() { return is_encrypted; }
 
+	void setPassword(const QString &password) { m_password = password; }
+
 	int getNumEntries() { return m_entryTotal; }
 	QString getComment() { return m_comment; }
 	szEntryInfo getEntryInfo(const QString &fileName);
@@ -102,6 +104,9 @@ public:
 
 private:
 	QLibrary *sevenzLib;
+#ifdef Q_OS_UNIX
+	QLibrary *rarLib;
+#endif
 
 	SevenZipInterface *szInterface;
 

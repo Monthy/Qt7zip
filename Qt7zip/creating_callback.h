@@ -83,9 +83,9 @@ public:
 	FStringVector FailedFiles;
 	CRecordVector<HRESULT> FailedCodes;
 
-	CArchiveUpdateCallback(): PasswordIsDefined(false), AskPassword(false), DirItems(0) {}
+	CArchiveUpdateCallback():  DirItems(0), PasswordIsDefined(false), AskPassword(false) {}
 
-	~CArchiveUpdateCallback() { Finilize(); }
+	virtual ~CArchiveUpdateCallback() { Finilize(); }
 	HRESULT Finilize();
 
 	void Init(const CObjectVector<CDirItem> *dirItems)
@@ -115,7 +115,8 @@ STDMETHODIMP CArchiveUpdateCallback::GetUpdateItemInfo(UInt32 /* index */,
 	if (newProperties)
 		*newProperties = BoolToInt(true);
 	if (indexInArchive)
-		*indexInArchive = (UInt32)(Int32)-1;
+		*indexInArchive = static_cast<UInt32>(-1);
+//		*indexInArchive = (UInt32)(Int32)-1;
 	return S_OK;
 }
 
@@ -207,7 +208,9 @@ STDMETHODIMP CArchiveUpdateCallback::GetVolumeSize(UInt32 index, UInt64 *size)
 {
 	if (VolumesSizes.Size() == 0)
 		return S_FALSE;
-	if (index >= (UInt32)VolumesSizes.Size())
+
+//	if (index >= (UInt32)VolumesSizes.Size())
+	if (index >= reinterpret_cast<UInt32>(VolumesSizes.Size()))
 		index = VolumesSizes.Size() - 1;
 	*size = VolumesSizes[index];
 	return S_OK;

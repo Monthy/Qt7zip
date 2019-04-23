@@ -65,6 +65,7 @@ private:
 	bool _extractMode;
 
 	bool _multiExtract;
+	QVector<quint32> _indexes;
 	UInt32 _index;
 
 	struct CProcessedFileInfo
@@ -91,8 +92,8 @@ public:
 	Byte *data;
 	UInt64 newFileSize;
 
-	CArchiveExtractCallbackRaw(bool multiExtract = false) :
-		_multiExtract(multiExtract), _index(0), PasswordIsDefined(false){}
+	CArchiveExtractCallbackRaw(bool multiExtract = false, QVector<quint32> indexes = QVector<quint32>()) :
+		_multiExtract(multiExtract), _indexes(indexes),  _index(0), PasswordIsDefined(false){}
 
 	virtual ~CArchiveExtractCallbackRaw() { MidFree(data); }
 };
@@ -266,15 +267,19 @@ STDMETHODIMP CArchiveExtractCallbackRaw::SetOperationResult(Int32 operationResul
 		case NArchive::NExtract::NOperationResult::kOK:
 			if (_multiExtract && !_processedFileInfo.isDir)
 			{
-//				QByteArray rawData((char *)data, newFileSize);
-				QByteArray rawData(reinterpret_cast<char *>(data), static_cast<int>(newFileSize));
-				MidFree(data);
-				data = 0;
-				allFilesRaw.append(rawData);
+				if (_indexes.contains(_index))
+				{
+	//				QByteArray rawData((char *)data, newFileSize);
+					QByteArray rawData(reinterpret_cast<char *>(data), static_cast<int>(newFileSize));
+					MidFree(data);
+					data = 0;
 
-			//	_fileInfoRaw.path = toQString(_filePath);
-			//	_fileInfoRaw.data = rawData;
-			//	allFileInfoRaw.append(_fileRawInfo);
+					allFilesRaw.append(rawData);
+
+				//	_fileInfoRaw.path = toQString(_filePath);
+				//	_fileInfoRaw.data = rawData;
+				//	allFileInfoRaw.append(_fileRawInfo);
+				}
 			}
 			break;
 		default:

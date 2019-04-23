@@ -35,6 +35,7 @@
 #include "extract_callback.h"
 #include "extract_callback_raw.h"
 #include "creating_callback.h"
+#include "compress_codecs_info.h"
 
 // Define GUID
 // Tou can find the list of all GUIDs in Guid.txt file.
@@ -92,12 +93,6 @@ const unsigned char rar5[8]   = {static_cast<unsigned char>(0x52), static_cast<u
 const unsigned char tar[6]    = "ustar";
 const unsigned char arj[2]    = {static_cast<unsigned char>(0x60), static_cast<unsigned char>(0xEA)};
 
-struct SevenZipInterface {
-	Func_CreateObject createObjectFunc;
-
-	CMyComPtr<IInArchive> archive;
-	CMyComPtr<IOutArchive> outArchive;
-};
 
 static GUID getFileType(const QString &fileName)
 {
@@ -190,7 +185,7 @@ static QVariant getProperty(CMyComPtr<IInArchive> archive, quint32 index, PROPID
 		break;
 		case kpidCRC:
 		{
-			char crc[8];
+			char crc[12];
 			ConvertPropVariantToShortString(value, crc);
 			QString crc32 = "0";
 			crc32.sprintf("%X", QString(crc).toUInt());
@@ -246,6 +241,9 @@ Qt7zip::~Qt7zip()
 	closeArchive();
 
 	delete szInterface;
+#ifdef Q_OS_UNIX
+	delete rarLib;
+#endif
 	delete sevenzLib;
 }
 
@@ -265,13 +263,16 @@ bool Qt7zip::loadLib(const QString &fileName)
 // fix2: rename 7z.so to 7z.dylib
 
 	is_load_7zlib = true;
-	QString path_lib_7z = "";
+	QString path_lib_7z  = "";
+	QString path_lib_rar = "";
 
 #if defined Q_OS_UNIX
 	#if defined Q_OS_MAC
-		path_lib_7z = QCoreApplication::applicationDirPath() +"/p7zip/7z"; // .so, .dylib
+		path_lib_7z  = QCoreApplication::applicationDirPath() +"/p7zip/7z"; // .so, .dylib
+		path_lib_rar = QCoreApplication::applicationDirPath() +"/p7zip/Codecs/Rar"; // .so, .dylib
 	#else
-		path_lib_7z = QString(LIBDIR) +"/p7zip/7z.so";
+		path_lib_7z  = QString(LIBDIR) +"/p7zip/7z.so";
+		path_lib_rar = QString(LIBDIR) +"/p7zip/Codecs/Rar.so";
 	#endif
 #else
 		path_lib_7z = QCoreApplication::applicationDirPath() +"/7z"; // .dll
@@ -281,11 +282,22 @@ bool Qt7zip::loadLib(const QString &fileName)
 		path_lib_7z = fileName;
 
 	if (sevenzLib == 0)
+	{
 		sevenzLib = new QLibrary(path_lib_7z);
-	else {
+
+	#if defined Q_OS_UNIX
+		rarLib = new QLibrary(path_lib_rar);
+	#endif
+	} else {
 		if (sevenzLib->isLoaded())
 			sevenzLib->unload();
 		sevenzLib->setFileName(path_lib_7z);
+
+	#if defined Q_OS_UNIX
+		if (rarLib->isLoaded())
+			rarLib->unload();
+		rarLib->setFileName(path_lib_rar);
+	#endif
 	}
 
 	if (!sevenzLib->load())
@@ -300,6 +312,20 @@ bool Qt7zip::loadLib(const QString &fileName)
 			PrintError("Can not get CreateObject");
 			is_load_7zlib = false;
 		}
+
+	#ifdef Q_OS_UNIX
+		szInterface->createObjectFuncRar = reinterpret_cast<Func_CreateObject>(rarLib->resolve("CreateObject"));
+		if (!szInterface->createObjectFuncRar)
+			PrintError("Can not get CreateObject (rar)");
+
+		szInterface->getMethodPropertyFuncRar = reinterpret_cast<Func_GetMethodProperty>(rarLib->resolve("GetMethodProperty"));
+		if (!szInterface->getMethodPropertyFuncRar)
+			PrintError("Can not get GetMethodProperty (rar)");
+
+		szInterface->getNumberOfMethodsFuncRar = reinterpret_cast<Func_GetNumberOfMethods>(rarLib->resolve("GetNumberOfMethods"));
+		if (!szInterface->getNumberOfMethodsFuncRar)
+			PrintError("Can not get GetNumberOfMethods (rar)");
+	#endif
 	}
 
 	return is_load_7zlib;
@@ -352,6 +378,21 @@ bool Qt7zip::open(const QString &fileName, const QString &password)
 			openCallbackSpec->PasswordIsDefined = true;
 			openCallbackSpec->Password = u_password;
 		}
+
+	//	if (guid_format == CLSID_CFormatRar || guid_format == CLSID_CFormatRar5)
+	//	{
+		#ifdef Q_OS_UNIX
+			CCompressCodecsInfo *compressCodecsInfo = new CCompressCodecsInfo(szInterface);
+
+			CMyComPtr<ISetCompressCodecsInfo> setCompressCodecsInfo;
+//			szInterface->archive->QueryInterface(IID_ISetCompressCodecsInfo, (void **)&setCompressCodecsInfo);
+			szInterface->archive->QueryInterface(IID_ISetCompressCodecsInfo, reinterpret_cast<void **>(&setCompressCodecsInfo));
+			if (setCompressCodecsInfo)
+			{
+				setCompressCodecsInfo->SetCompressCodecsInfo(compressCodecsInfo);
+			}
+		#endif
+	//	}
 
 		const UInt64 scanSize = 1 << 23;
 		if (szInterface->archive->Open(file, &scanSize, openCallback) != S_OK)
@@ -584,11 +625,6 @@ QList<QByteArray> Qt7zip::extractRaw(const QList<int> indices)
 	if (!is_open)
 		return listRaw;
 
-// Extract command
-	CArchiveExtractCallbackRaw *extractCallbackSpecRaw = new CArchiveExtractCallbackRaw(true);
-	CMyComPtr<IArchiveExtractCallback> extractCallbackRaw(extractCallbackSpecRaw);
-	extractCallbackSpecRaw->Init(szInterface->archive);
-
 	QMap<quint32, quint32> ordenIndexes;
 	const int countIndices = indices.size();
 	for (int i = 0; i < countIndices; ++i)
@@ -597,17 +633,29 @@ QList<QByteArray> Qt7zip::extractRaw(const QList<int> indices)
 		ordenIndexes.insert(valor, valor);
 	}
 
-	QVector<quint32> currentIndexes;
+	QVector<quint32> indexes;
 	foreach (quint32 index, ordenIndexes)
 	{
-		currentIndexes.append(index);
+		indexes.append(index);
+	}
+
+// Extract command
+	CArchiveExtractCallbackRaw *extractCallbackSpecRaw = new CArchiveExtractCallbackRaw(true, indexes);
+	CMyComPtr<IArchiveExtractCallback> extractCallbackRaw(extractCallbackSpecRaw);
+	extractCallbackSpecRaw->Init(szInterface->archive);
+
+	extractCallbackSpecRaw->PasswordIsDefined = false;
+	if (!m_password.isEmpty())
+	{
+		extractCallbackSpecRaw->PasswordIsDefined = true;
+		extractCallbackSpecRaw->Password = toUString(m_password);
 	}
 
 	HRESULT result;
-	if (currentIndexes.isEmpty())
+	if (indexes.isEmpty())
 		result = szInterface->archive->Extract(NULL, static_cast<UInt32>(-1), false, extractCallbackRaw);
 	else
-		result = szInterface->archive->Extract(currentIndexes.data(), static_cast<UInt32>(currentIndexes.count()), false, extractCallbackRaw);
+		result = szInterface->archive->Extract(indexes.data(), static_cast<UInt32>(indexes.count()), false, extractCallbackRaw);
 
 //	m_entryListInfoRaw.clear();
 //	const int countFileRawInfo = extractCallbackSpecRaw->allFileInfoRaw.size();

@@ -65,6 +65,19 @@ using namespace NWindows;
 using namespace NFile;
 using namespace NDir;
 
+struct SevenZipInterface {
+	Func_CreateObject createObjectFunc;
+
+#ifdef Q_OS_UNIX
+	Func_CreateObject createObjectFuncRar;
+	Func_GetMethodProperty getMethodPropertyFuncRar;
+	Func_GetNumberOfMethods getNumberOfMethodsFuncRar;
+#endif
+
+	CMyComPtr<IInArchive> archive;
+	CMyComPtr<IOutArchive> outArchive;
+};
+
 static void PrintString(const QString &s)
 {
 	Q_UNUSED(s);
