@@ -6,4 +6,4 @@
 
 TEMPLATE = subdirs
 
-SUBDIRS = Qt7zipExample
+SUBDIRS = Qt7zipExample Qt7zipExampleConsola

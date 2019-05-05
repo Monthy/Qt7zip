@@ -57,10 +57,8 @@ MainWindow::MainWindow(QWidget *parent) :
 	connect(z_file, SIGNAL(passwordRequired()), this, SLOT(passwordRequired()));
 
 	if (is_load_7zlib)
-	{
-
 		 ui->lb_info->setText(tr("Libreria de 7-Zip cargada correctamente."));
-	} else
+	else
 		 ui->lb_info->setText(tr("No se ha podido cargar la libreria de 7-Zip."));
 }
 
