@@ -102,6 +102,9 @@ public:
 	bool create(CompressFormat format, const QStringList &list_entry, const QString &fileName, const QString &password = "");
 	bool create(CompressFormat format, const QList<szEntryCompress> &list_entry, const QString &fileName, const QString &password = "");
 
+signals:
+	void passwordRequired();
+
 private:
 	QLibrary *sevenzLib;
 #ifdef Q_OS_UNIX

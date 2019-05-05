@@ -24,6 +24,7 @@
 **/
 
 #include <QFileDialog>
+#include <QInputDialog>
 #include <QDirIterator>
 #include <QTextCodec>
 
@@ -53,9 +54,13 @@ MainWindow::MainWindow(QWidget *parent) :
 	z_file = new Qt7zip();
 	is_load_7zlib = z_file->isLoad7zLib();
 
+	connect(z_file, SIGNAL(passwordRequired()), this, SLOT(passwordRequired()));
+
 	if (is_load_7zlib)
+	{
+
 		 ui->lb_info->setText(tr("Libreria de 7-Zip cargada correctamente."));
-	else
+	} else
 		 ui->lb_info->setText(tr("No se ha podido cargar la libreria de 7-Zip."));
 }
 
@@ -175,6 +180,17 @@ QString MainWindow::leerDataRaw(QByteArray data) const
 	}
 
 	return text;
+}
+
+void MainWindow::passwordRequired()
+{
+	bool ok = false;
+	QString text_pass = QInputDialog::getText(this, tr("Archivos cifrados encontrados") +"...", tr("Puede que necesite una contraseña") +"\n"+ tr("Contraseña") +":", QLineEdit::Password, "", &ok);
+	if (ok && !text_pass.isEmpty())
+	{
+		ui->txt_pass->setText(text_pass);
+		z_file->setPassword(text_pass);
+	}
 }
 
 void MainWindow::on_btn_abrir_clicked()

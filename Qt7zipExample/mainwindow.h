@@ -71,6 +71,7 @@ private:
 	QString leerDataRaw(QByteArray data) const;
 
 private slots:
+	void passwordRequired();
 	void on_btn_abrir_clicked();
 	void on_btn_descomprimir_selected_clicked();
 	void on_btn_descomprimir_all_clicked();

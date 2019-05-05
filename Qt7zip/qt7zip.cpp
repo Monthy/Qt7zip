@@ -28,7 +28,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QInputDialog>
+#include <QVariant>
 #include <QCoreApplication>
 
 #include "open_callback.h"
@@ -447,12 +447,7 @@ bool Qt7zip::open(const QString &fileName, const QString &password)
 	}
 
 	if (is_encrypted && m_password.isEmpty())
-	{
-		bool ok = false;
-		QString text_pass = QInputDialog::getText(0, tr("Archivos cifrados encontrados") +"...", tr("Puede que necesite una contraseña") +"\n"+ tr("Contraseña") +":", QLineEdit::Password, "", &ok);
-		if (ok && !text_pass.isEmpty())
-			m_password = text_pass;
-	}
+		emit passwordRequired();
 
 	return true;
 }
